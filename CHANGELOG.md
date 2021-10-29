@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.17.3 (2021-10-28)
+
+### Enhancements
+  - Support 3-tuple for JS class transitions to support staged animations where a transition class is applied with a starting and ending class
+  - Allow JS commands to be executed on DOM nodes outside of the LiveView container
+
+### Optimization
+  - Avoid duplicate statics inside comprehension. In previous versions, comprehensions were able to avoid duplication only the content in their root. Now we recursively traverse all comprehension nodes and send the static only once for the whole comprehension. This should massively reduce the cost of sending comprehensions over the wire
+
+### Bug fixes
+  - Fix HTML engine bug causing expressions to be duplicated or not rendered correctly
+  - Fix HTML engine bug causing slots to not be re-rendered when they should have
+  - Fix form recovery being sent to wrong target
+
 ## 0.17.2 (2021-10-22)
 
 ### Bug fixes
@@ -63,7 +77,7 @@ atom `:default`.
 #### LEEx templates in stateful LiveComponents
 
 Stateful LiveComponents (where an `:id` is given) must now return HEEx templates
-(`~H` sigil or `.heex` extension). LEEx temlates (`~L` sigil or `.leex` extension)
+(`~H` sigil or `.heex` extension). LEEx templates (`~L` sigil or `.leex` extension)
 are no longer supported. This addresses bugs and allows stateful components
 to be rendered more efficiently client-side.
 
@@ -301,6 +315,9 @@ import { LiveSocket } from "phoenix_live_view"
 Additionally on the client, the root LiveView element no longer exposes the
 LiveView module name, therefore the `phx-view` attribute is never set.
 Similarly, the `viewName` property of client hooks has been removed.
+
+Codebases calling a custom function `component/3` should rename it or specify its module to avoid a conflict,
+as LiveView introduces a macro with that name and it is special cased by the underlying engine.
 
 ### Enhancements
   - Introduce HEEx templates

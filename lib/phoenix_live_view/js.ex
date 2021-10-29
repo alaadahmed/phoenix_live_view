@@ -3,7 +3,7 @@ defmodule Phoenix.LiveView.JS do
   Provides commands for executing JavaScript utility operations on the client.
 
   JS commands support a variety of utility operations for common client-side
-  needs, such as adding classing, showing or hiding content, and transitioning
+  needs, such as adding or removing css classes, showing or hiding content, and transitioning
   in and out with animations. While these operations can be accomplished via
   client-side hooks, JS commands are DOM patch aware, so operations applied
   by the JS APIs will stick to elements across patches from the server.
@@ -96,7 +96,7 @@ defmodule Phoenix.LiveView.JS do
     * `:target` - The selector or component ID to push to
     * `:loading` - The selector to apply the phx loading classes to
     * `:page_loading` - Boolean to trigger the phx:page-loading-start and
-      phx:page-loading-stop events for this push. Default `false`
+      phx:page-loading-stop events for this push. Defaults to `false`
     * `:value` - The map of values to send to the server
 
   ## Examples
@@ -135,7 +135,7 @@ defmodule Phoenix.LiveView.JS do
   ## Options
 
     * `:to` - The optional DOM selector to dispatch the event to.
-      defaults to the interacted element.
+      Defaults to the interacted element.
     * `:detail` - The optional detail map to dispatch along
       with the client event. The details will be available in the
       `event.detail` attribute for event listeners.
@@ -165,9 +165,15 @@ defmodule Phoenix.LiveView.JS do
   ## Options
 
     * `:to` - The optional DOM selector to toggle.
-      defaults to the interacted element.
-    * `:in` - The string of classes to apply when toggling in.
-    * `:out` - The string of classes to apply when toggling out.
+      Defaults to the interacted element.
+    * `:in` - The string of classes to apply when toggling in, or
+      a 3-tuple containing the transition class, the class to apply
+      to start the transition, and the ending transition class, such as:
+      `{"ease-out duration-300", "opacity-0", "opacity-100"}`
+    * `:out` - The string of classes to apply when toggling out, or
+      a 3-tuple containing the transition class, the class to apply
+      to start the transition, and the ending transition class, such as:
+      `{"ease-out duration-300", "opacity-100", "opacity-0"}`
     * `:time` - The time to apply the transition `:in` and `:out` classes.
       Defaults #{@default_transition_time}
     * `:display` - The optional display value to set when toggling in. Defaults `"block"`.
@@ -190,8 +196,8 @@ defmodule Phoenix.LiveView.JS do
 
   def toggle(cmd, opts) when is_list(opts) do
     opts = validate_keys(opts, :toggle, [:to, :in, :out, :display, :time])
-    in_classes = class_names(opts[:in])
-    out_classes = class_names(opts[:out])
+    in_classes = transition_class_names(opts[:in])
+    out_classes = transition_class_names(opts[:out])
     time = opts[:time] || @default_transition_time
 
     put_op(cmd, "toggle", %{
@@ -209,8 +215,11 @@ defmodule Phoenix.LiveView.JS do
   ## Options
 
     * `:to` - The optional DOM selector to show.
-      defaults to the interacted element.
-    * `:transition` - The string of classes to apply before showing.
+      Defaults to the interacted element.
+    * `:transition` - The string of classes to apply before showing or
+      a 3-tuple containing the transition class, the class to apply
+      to start the transition, and the ending transition class, such as:
+      `{"ease-out duration-300", "opacity-0", "opacity-100"}`
     * `:time` - The time to apply the transition from `:transition`.
       Defaults #{@default_transition_time}
     * `:display` - The optional display value to set when showing. Defaults `"block"`.
@@ -233,13 +242,13 @@ defmodule Phoenix.LiveView.JS do
 
   def show(cmd, opts) when is_list(opts) do
     opts = validate_keys(opts, :show, [:to, :transition, :display, :time])
-    names = class_names(opts[:transition])
+    transition = transition_class_names(opts[:transition])
     time = opts[:time] || @default_transition_time
 
     put_op(cmd, "show", %{
       to: opts[:to],
       display: opts[:display],
-      transition: names,
+      transition: transition,
       time: time
     })
   end
@@ -250,8 +259,11 @@ defmodule Phoenix.LiveView.JS do
   ## Options
 
     * `:to` - The optional DOM selector to hide.
-      defaults to the interacted element.
-    * `:transition` - The string of classes to apply before hiding.
+      Defaults to the interacted element.
+    * `:transition` - The string of classes to apply before hiding or
+      a 3-tuple containing the transition class, the class to apply
+      to start the transition, and the ending transition class, such as:
+      `{"ease-out duration-300", "opacity-0", "opacity-100"}`
     * `:time` - The time to apply the transition from `:transition`.
       Defaults #{@default_transition_time}
 
@@ -273,12 +285,12 @@ defmodule Phoenix.LiveView.JS do
 
   def hide(cmd, opts) when is_list(opts) do
     opts = validate_keys(opts, :hide, [:to, :transition, :time])
-    names = class_names(opts[:transition])
+    transition = transition_class_names(opts[:transition])
     time = opts[:time] || @default_transition_time
 
     put_op(cmd, "hide", %{
       to: opts[:to],
-      transition: names,
+      transition: transition,
       time: time
     })
   end
@@ -289,8 +301,11 @@ defmodule Phoenix.LiveView.JS do
   ## Options
 
     * `:to` - The optional DOM selector to add classes to.
-      defaults to the interacted element.
-    * `:transition` - The string of classes to apply before adding classes.
+      Defaults to the interacted element.
+    * `:transition` - The string of classes to apply before adding classes or
+      a 3-tuple containing the transition class, the class to apply
+      to start the transition, and the ending transition class, such as:
+      `{"ease-out duration-300", "opacity-0", "opacity-100"}`
     * `:time` - The time to apply the transition from `:transition`.
       Defaults #{@default_transition_time}
 
@@ -318,7 +333,7 @@ defmodule Phoenix.LiveView.JS do
     put_op(js, "add_class", %{
       to: opts[:to],
       names: class_names(names),
-      transition: class_names(opts[:transition]),
+      transition: transition_class_names(opts[:transition]),
       time: time
     })
   end
@@ -329,8 +344,11 @@ defmodule Phoenix.LiveView.JS do
   ## Options
 
     * `:to` - The optional DOM selector to remove classes from.
-      defaults to the interacted element.
-    * `:transition` - The string of classes to apply before removing classes.
+      Defaults to the interacted element.
+    * `:transition` - The string of classes to apply before removing classes or
+      a 3-tuple containing the transition class, the class to apply
+      to start the transition, and the ending transition class, such as:
+      `{"ease-out duration-300", "opacity-0", "opacity-100"}`
     * `:time` - The time to apply the transition from `:transition`.
       Defaults #{@default_transition_time}
 
@@ -358,7 +376,7 @@ defmodule Phoenix.LiveView.JS do
     put_op(js, "remove_class", %{
       to: opts[:to],
       names: class_names(names),
-      transition: class_names(opts[:transition]),
+      transition: transition_class_names(opts[:transition]),
       time: time
     })
   end
@@ -367,13 +385,16 @@ defmodule Phoenix.LiveView.JS do
   Transitions elements.
 
   Transitions are useful for temporarily adding an animation class
-  to element(s), such as for highligthing content changes.
+  to element(s), such as for highlighting content changes.
 
   ## Options
 
     * `:to` - The optional DOM selector to remove classes from.
-      defaults to the interacted element.
-    * `:transition` - The string of classes to apply before removing classes.
+      Defaults to the interacted element.
+    * `:transition` - The string of classes to apply before removing classes or
+      a 3-tuple containing the transition class, the class to apply
+      to start the transition, and the ending transition class, such as:
+      `{"ease-out duration-300", "opacity-0", "opacity-100"}`
     * `:time` - The time to apply the transition from `:transition`.
       Defaults #{@default_transition_time}
 
@@ -382,22 +403,27 @@ defmodule Phoenix.LiveView.JS do
       <div id="item">My Item</div>
       <button phx-click={JS.transition("shake", to: "#item")}>Shake!</button>
   """
-  def transition(names) when is_binary(names) do
+  def transition(names) when is_binary(names) or is_tuple(names) do
     transition(%JS{}, names, [])
   end
 
-  def transition(names, opts) when is_binary(names) and is_list(opts) do
+  def transition(names, opts) when (is_binary(names) or is_tuple(names)) and is_list(opts) do
     transition(%JS{}, names, opts)
   end
 
-  def transition(%JS{} = cmd, names) when is_binary(names) do
+  def transition(%JS{} = cmd, names) when is_binary(names) or is_tuple(names) do
     transition(cmd, names, [])
   end
 
-  def transition(%JS{} = cmd, names, opts) when is_binary(names) and is_list(opts) do
+  def transition(%JS{} = cmd, names, opts) when (is_binary(names) or is_tuple(names)) and is_list(opts) do
     opts = validate_keys(opts, :transition, [:to, :time])
     time = opts[:time] || @default_transition_time
-    put_op(cmd, "transition", %{time: time, to: opts[:to], names: class_names(names)})
+
+    put_op(cmd, "transition", %{
+      time: time,
+      to: opts[:to],
+      transition: transition_class_names(names)
+    })
   end
 
   defp put_op(%JS{ops: ops} = cmd, kind, %{} = args) do
@@ -408,6 +434,16 @@ defmodule Phoenix.LiveView.JS do
 
   defp class_names(names) do
     String.split(names, " ")
+  end
+
+  defp transition_class_names(nil), do: [[], [], []]
+
+  defp transition_class_names(transition) when is_binary(transition),
+    do: [class_names(transition), [], []]
+
+  defp transition_class_names({transition, tstart, tend})
+       when is_binary(tstart) and is_binary(transition) and is_binary(tend) do
+    [class_names(transition), class_names(tstart), class_names(tend)]
   end
 
   defp validate_keys(opts, kind, allowed_keys) do

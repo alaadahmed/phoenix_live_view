@@ -198,6 +198,19 @@ defmodule Phoenix.LiveView.HTMLEngineTest do
 
     # A bug made it so "not text" appeared inside @text.
     assert render(template, assigns) == "text\nnot text"
+
+    template = ~S"""
+    <%= for i <- 1..3 do %>
+      <div id={i}>
+        <%= Phoenix.LiveView.HTMLEngineTest.do_block do %>
+          <%= i %>
+        <% end %>
+      </div>
+    <% end %>
+    """
+
+    # A bug made it so "id=1" was not handled properly
+    assert render(template, assigns) =~ ~s'<div id="1">'
   end
 
   test "optimizes class attributes" do
@@ -1142,7 +1155,7 @@ defmodule Phoenix.LiveView.HTMLEngineTest do
   describe "handle errors in expressions" do
     if Version.match?(System.version(), ">= 1.12.0") do
       test "inside attribute values" do
-        assert_raise(SyntaxError, "test/phoenix_live_view/html_engine_test.exs:12:22: syntax error before: ','", fn ->
+        assert_raise(SyntaxError, ~r"test/phoenix_live_view/html_engine_test.exs:12:22: syntax error before: ','", fn ->
           opts = [line: 10, indentation: 8]
 
           eval(
@@ -1158,7 +1171,7 @@ defmodule Phoenix.LiveView.HTMLEngineTest do
       end
 
       test "inside root attribute value" do
-        assert_raise(SyntaxError, "test/phoenix_live_view/html_engine_test.exs:12:16: syntax error before: ','", fn ->
+        assert_raise(SyntaxError, ~r"test/phoenix_live_view/html_engine_test.exs:12:16: syntax error before: ','", fn ->
           opts = [line: 10, indentation: 8]
 
           eval(

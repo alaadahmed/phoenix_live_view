@@ -190,8 +190,8 @@ export default class View {
     this.liveSocket.log(this, kind, msgCallback)
   }
 
-  transition(time, onDone = function(){}){
-    this.liveSocket.transition(time, onDone)
+  transition(time, onStart, onDone = function(){}){
+    this.liveSocket.transition(time, onStart, onDone)
   }
 
   withinTargets(phxTarget, callback){
@@ -199,7 +199,7 @@ export default class View {
       return this.liveSocket.owner(phxTarget, view => callback(view, phxTarget))
     }
 
-    if(typeof(phxTarget) === "number" || /^(0|[1-9]\d*)$/.test(phxTarget)){
+    if(isCid(phxTarget)){
       let targets = DOM.findComponentNodeList(this.el, phxTarget)
       if(targets.length === 0){
         logError(`no component found matching phx-target of ${phxTarget}`)
@@ -716,9 +716,12 @@ export default class View {
   }
 
   targetComponentID(target, targetCtx){
-    if(isCid(targetCtx)){
-      return targetCtx
-    } else if(target.getAttribute(this.binding("target"))){
+    if(isCid(targetCtx)){ return targetCtx }
+
+    let cidOrSelector = target.getAttribute(this.binding("target"))
+    if(isCid(cidOrSelector)){
+      return parseInt(cidOrSelector)
+    } else if(targetCtx && cidOrSelector !== null){
       return this.closestComponentID(targetCtx)
     } else {
       return null
@@ -1008,7 +1011,7 @@ export default class View {
         .map(form => {
           let newForm = template.content.querySelector(`form[id="${form.id}"][${phxChange}="${form.getAttribute(phxChange)}"]`)
           if(newForm){
-            return [form, newForm, this.componentID(newForm)]
+            return [form, newForm, this.targetComponentID(newForm)]
           } else {
             return [form, null, null]
           }
