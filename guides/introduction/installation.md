@@ -1,8 +1,18 @@
 # Installation
 
-**Note:** Phoenix v1.5 comes with built-in support for LiveView apps. Just create
-your application with `mix phx.new my_app --live`. If you are using earlier Phoenix
-versions or your app already exists, keep on reading.
+## New projects
+
+Phoenix v1.5+ comes with built-in support for LiveView apps. Just create
+your application with `mix phx.new my_app --live`. The `--live` flag has
+become the default on Phoenix v1.6.
+
+Once you've created a LiveView project, refer to [LiveView documentation](`Phoenix.LiveView`)
+for further information on how to use it.
+
+## Existing projects
+
+If you are using a Phoenix version earlier than v1.5 or your app already exists, continue
+with the following steps.
 
 The instructions below will serve if you are installing the latest stable version
 from Hex. To start using LiveView, add one of the following dependencies to your `mix.exs`
@@ -13,7 +23,7 @@ If installing from Hex, use the latest version from there:
 ```elixir
 def deps do
   [
-    {:phoenix_live_view, "~> 0.17.3"},
+    {:phoenix_live_view, "~> 0.17.5"},
     {:floki, ">= 0.30.0", only: :test}
   ]
 end
@@ -198,7 +208,7 @@ pipeline :browser do
 end
 ```
 
-The layout given to `put_root_layout` must use `<%= @inner_content %>` instead of `<%= render(@view_module, @view_template, assigns) %>`. It is typically very barebones, with mostly
+The layout given to `put_root_layout` is typically very barebones, with mostly
 `<head>` and `<body>` tags. For example:
 
 ```elixir

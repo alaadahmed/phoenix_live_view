@@ -74,8 +74,7 @@ defmodule Phoenix.LiveView do
   and `c:render/1`:
 
       defmodule MyAppWeb.ThermostatLive do
-        # If you generated an app with mix phx.new --live,
-        # the line below would be: use MyAppWeb, :live_view
+        # In Phoenix v1.6+ apps, the line below should be: use MyAppWeb, :live_view
         use Phoenix.LiveView
 
         def render(assigns) do
@@ -112,10 +111,8 @@ defmodule Phoenix.LiveView do
 
   *Note:* the above assumes there is `plug :put_root_layout` call
   in your router that configures the LiveView layout. This call is
-  automatically included by `mix phx.new --live` and described in
-  the installation guide. If you don't want to configure a root layout,
-  you must pass `layout: {MyAppWeb.LayoutView, "app.html"}` as an
-  option to the `Phoenix.LiveView.Router.live/3` macro above.
+  automatically included in Phoenix v1.6 apps and described in
+  the installation guide.
 
   Alternatively, you can `live_render` from any template. In your view:
 
@@ -125,24 +122,6 @@ defmodule Phoenix.LiveView do
 
       <h1>Temperature Control</h1>
       <%= live_render(@conn, MyAppWeb.ThermostatLive) %>
-
-  When a LiveView is rendered, all of the data currently stored in the
-  connection session (see `Plug.Conn.get_session/1`) will be given to
-  the LiveView.
-
-  It is also possible to pass additional session information to the LiveView
-  through a `:session` option:
-
-      # In the router
-      live "/thermostat", ThermostatLive, session: %{"extra_token" => "foo"}
-
-      # In a view
-      <%= live_render(@conn, MyAppWeb.ThermostatLive, session: %{"extra_token" => "foo"}) %>
-
-  Notice the `:session` uses string keys as a reminder that session data
-  is serialized and sent to the client. So you should always keep the data
-  in the session to a minimum. For example, instead of storing a User struct,
-  you should store the "user_id" and load the User when the LiveView mounts.
 
   Once the LiveView is rendered, a regular HTML response is sent. In your
   app.js file, you should find the following:
@@ -340,7 +319,7 @@ defmodule Phoenix.LiveView do
     * [Uploads (External)](uploads-external.md)
   '''
 
-  alias Phoenix.LiveView.{Socket, Route}
+  alias Phoenix.LiveView.Socket
 
   @type unsigned_params :: map
 
@@ -911,7 +890,7 @@ defmodule Phoenix.LiveView do
         if entry.done? do
           uploaded_file =
             consume_uploaded_entry(socket, entry, fn %{} = meta ->
-              ...
+              {:ok, ...}
             end)
 
           {:noreply, put_flash(socket, :info, "file #{uploaded_file.name} uploaded")}
@@ -971,6 +950,11 @@ defmodule Phoenix.LiveView do
   it is guaranteed that all entries have completed before the submit event
   is invoked. Once entries are consumed, they are removed from the upload.
 
+  The function passed to consume the may return a tagged tuple of the form
+  `{:ok, my_result}` to collect results about the consumed entries, or
+  `{:postpone, my_result}` to collect results, but postpone the file
+  consumption to be performed later.
+
   ## Examples
 
       def handle_event("save", _params, socket) do
@@ -978,7 +962,7 @@ defmodule Phoenix.LiveView do
           consume_uploaded_entries(socket, :avatar, fn %{path: path}, _entry ->
             dest = Path.join("priv/static/uploads", Path.basename(path))
             File.cp!(path, dest)
-            Routes.static_path(socket, "/uploads/#{Path.basename(dest)}")
+            {:ok, Routes.static_path(socket, "/uploads/#{Path.basename(dest)}")}
           end)
         {:noreply, update(socket, :uploaded_files, &(&1 ++ uploaded_files))}
       end
@@ -996,6 +980,11 @@ defmodule Phoenix.LiveView do
   This is a lower-level feature than `consume_uploaded_entries/3` and useful
   for scenarios where you want to consume entries as they are individually completed.
 
+  Like `consume_uploaded_entries/3`, the function passed to consume the may return
+  a tagged tuple of the form `{:ok, my_result}` to collect results about the
+  consumed entries, or `{:postpone, my_result}` to collect results,
+  but postpone the file consumption to be performed later.
+
   ## Examples
 
       def handle_event("save", _params, socket) do
@@ -1005,7 +994,7 @@ defmodule Phoenix.LiveView do
               consume_uploaded_entry(socket, entry, fn %{path: path} ->
                 dest = Path.join("priv/static/uploads", Path.basename(path))
                 File.cp!(path, dest)
-                Routes.static_path(socket, "/uploads/#{Path.basename(dest)}")
+                {:ok, Routes.static_path(socket, "/uploads/#{Path.basename(dest)}")}
               end)
             end
             {:noreply, update(socket, :uploaded_files, &(&1 ++ uploaded_files))}
@@ -1065,17 +1054,8 @@ defmodule Phoenix.LiveView do
 
   """
   def push_patch(%Socket{} = socket, opts) do
-    %{to: to} = opts = push_opts!(opts, "push_patch/2")
-
-    case Route.live_link_info!(socket, socket.private.root_view, to) do
-      {:internal, %Route{params: params, action: action}} ->
-        put_redirect(socket, {:live, {params, action}, opts})
-
-      {:external, _uri} ->
-        raise ArgumentError,
-              "cannot push_patch/2 to #{inspect(to)} because the given path " <>
-                "does not point to the current root view #{inspect(socket.private.root_view)}"
-    end
+    opts = push_opts!(opts, "push_patch/2")
+    put_redirect(socket, {:live, :patch, opts})
   end
 
   @doc """

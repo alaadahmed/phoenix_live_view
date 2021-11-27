@@ -65,12 +65,14 @@ defmodule Phoenix.LiveView.LiveViewTest do
 
       assert metadata.params == %{"foo" => "bar"}
       assert metadata.session == %{"current_user_id" => "1"}
+      assert metadata.uri == "http://www.example.com/thermo?foo=bar"
 
       assert_receive {:event, [:phoenix, :live_view, :mount, :stop], %{duration: _},
                       %{socket: %Socket{transport_pid: nil}} = metadata}
 
       assert metadata.params == %{"foo" => "bar"}
       assert metadata.session == %{"current_user_id" => "1"}
+      assert metadata.uri == "http://www.example.com/thermo?foo=bar"
     end
 
     @tag session: %{current_user_id: "1"}
@@ -86,6 +88,7 @@ defmodule Phoenix.LiveView.LiveViewTest do
 
       assert metadata.params == %{"crash_on" => "disconnected_mount"}
       assert metadata.session == %{"current_user_id" => "1"}
+      assert metadata.uri == "http://www.example.com/errors?crash_on=disconnected_mount"
 
       assert_receive {:event, [:phoenix, :live_view, :mount, :exception], %{duration: _},
                       %{socket: %Socket{transport_pid: nil}} = metadata}
@@ -94,6 +97,7 @@ defmodule Phoenix.LiveView.LiveViewTest do
       assert %RuntimeError{} = metadata.reason
       assert metadata.params == %{"crash_on" => "disconnected_mount"}
       assert metadata.session == %{"current_user_id" => "1"}
+      assert metadata.uri == "http://www.example.com/errors?crash_on=disconnected_mount"
     end
 
     test "live mount in single call", %{conn: conn} do
@@ -134,6 +138,7 @@ defmodule Phoenix.LiveView.LiveViewTest do
       assert metadata.socket.transport_pid
       assert metadata.params == %{"foo" => "bar"}
       assert metadata.session == %{"current_user_id" => "1"}
+      assert metadata.uri == "http://www.example.com/thermo?foo=bar"
 
       assert_receive {:event, [:phoenix, :live_view, :mount, :stop], %{duration: _},
                       %{socket: %{transport_pid: pid}} = metadata}
@@ -142,6 +147,7 @@ defmodule Phoenix.LiveView.LiveViewTest do
       assert metadata.socket.transport_pid
       assert metadata.params == %{"foo" => "bar"}
       assert metadata.session == %{"current_user_id" => "1"}
+      assert metadata.uri == "http://www.example.com/thermo?foo=bar"
     end
 
     @tag session: %{current_user_id: "1"}
@@ -157,6 +163,7 @@ defmodule Phoenix.LiveView.LiveViewTest do
       assert metadata.socket.transport_pid
       assert metadata.params == %{"crash_on" => "connected_mount"}
       assert metadata.session == %{"current_user_id" => "1"}
+      assert metadata.uri == "http://www.example.com/errors?crash_on=connected_mount"
 
       assert_receive {:event, [:phoenix, :live_view, :mount, :exception], %{duration: _},
                       %{socket: %{transport_pid: pid}} = metadata}
@@ -167,6 +174,7 @@ defmodule Phoenix.LiveView.LiveViewTest do
       assert %RuntimeError{} = metadata.reason
       assert metadata.params == %{"crash_on" => "connected_mount"}
       assert metadata.session == %{"current_user_id" => "1"}
+      assert metadata.uri == "http://www.example.com/errors?crash_on=connected_mount"
     end
 
     test "push_redirect when disconnected", %{conn: conn} do
@@ -304,10 +312,9 @@ defmodule Phoenix.LiveView.LiveViewTest do
 
     test "renders a live view with custom session and a router", %{conn: conn} do
       conn = %Plug.Conn{conn | request_path: "/router/thermo_defaults/123"}
+
       {:ok, view, _} =
-        live_isolated(conn, Phoenix.LiveViewTest.DashboardLive,
-          session: %{"hello" => "world"}
-        )
+        live_isolated(conn, Phoenix.LiveViewTest.DashboardLive, session: %{"hello" => "world"})
 
       assert render(view) =~ "session: %{&quot;hello&quot; =&gt; &quot;world&quot;}"
     end
@@ -826,6 +833,7 @@ defmodule Phoenix.LiveView.LiveViewTest do
       assert clock_view = find_live_child(thermo_view, "clock")
 
       id = Enum.random(1000..9999)
+
       send(
         clock_view.pid,
         {:run,
@@ -906,6 +914,30 @@ defmodule Phoenix.LiveView.LiveViewTest do
 
       assert_receive {^ref, transport_pid}
       assert transport_pid == self()
+    end
+  end
+
+  describe "sticky live_render" do
+    @tag session: %{name: "ny"}
+    test "process does not go down with parent", %{conn: conn} do
+      {:ok, clock_view, _html} = live(conn, "/clock?sticky=true")
+      %Phoenix.LiveViewTest.View{} = sticky_child = find_live_child(clock_view, "ny-controls")
+      child_pid = sticky_child.pid
+      assert Process.alive?(child_pid)
+      Process.monitor(child_pid)
+
+      send(
+        clock_view.pid,
+        {:run,
+         fn socket ->
+           {:noreply, LiveView.push_redirect(socket, to: "/clock?sticky=true&redirected=true")}
+         end}
+      )
+
+      assert_redirect(clock_view, "/clock?sticky=true&redirected=true")
+      refute_receive {:DOWN, _ref, :process, ^child_pid, {:shutdown, :parent_exited}}
+      # client proxy transport
+      assert_receive {:DOWN, _ref, :process, ^child_pid, {:shutdown, :closed}}
     end
   end
 end

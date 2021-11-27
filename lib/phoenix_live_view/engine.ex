@@ -298,7 +298,7 @@ defmodule Phoenix.LiveView.Engine do
   @doc false
   def init(_opts) do
     # Phoenix.LiveView.HTMLEngine calls this engine in a non-linear order
-    # to evaluate slots, which can lead to varible conflicts. Therefore we
+    # to evaluate slots, which can lead to variable conflicts. Therefore we
     # use a counter to ensure all variable names are unique.
     %{
       static: [],
@@ -534,7 +534,7 @@ defmodule Phoenix.LiveView.Engine do
   end
 
   defp to_conditional_var(keys, var, live_struct) when keys == %{} do
-    quote do
+    quote generated: true do
       unquote(var) =
         case changed do
           %{} -> nil
@@ -733,7 +733,7 @@ defmodule Phoenix.LiveView.Engine do
   defp slots_to_rendered(static, vars) do
     Macro.postwalk(static, fn
       {call, meta, [name, [do: block]]} = node ->
-        if extract_call(call) == :slot do
+        if extract_call(call) == :inner_block do
           {call, meta, [name, [do: maybe_block_to_rendered(block, vars)]]}
         else
           node
@@ -902,15 +902,13 @@ defmodule Phoenix.LiveView.Engine do
   end
 
   # Classify calls
-  defp analyze({left, meta, args} = expr, vars, assigns) do
+  defp analyze({left, meta, args}, vars, assigns) do
     call = extract_call(left)
 
     case classify_taint(call, args) do
-      :always ->
-        case vars do
-          {:restricted, _} -> {expr, vars, assigns}
-          {_, map} -> {expr, {:tainted, map}, assigns}
-        end
+      :special_form ->
+        code = quote do: unquote(__MODULE__).__raise__(unquote(call), unquote(length(args)))
+        {code, vars, assigns}
 
       :render ->
         {args, [opts]} = Enum.split(args, -1)
@@ -989,6 +987,12 @@ defmodule Phoenix.LiveView.Engine do
       |> :erlang.md5()
 
     fingerprint
+  end
+
+  @doc false
+  defmacro __raise__(special_form, arity) do
+    message =  "cannot invoke special form #{special_form}/#{arity} inside HEEx templates"
+    reraise ArgumentError.exception(message), Macro.Env.stacktrace(__CALLER__)
   end
 
   @doc false
@@ -1173,15 +1177,15 @@ defmodule Phoenix.LiveView.Engine do
   # TODO: Remove me when live_component/2/3 are removed
   defp classify_taint(:live_component, [_, [do: _]]), do: :render
   defp classify_taint(:live_component, [_, _, [do: _]]), do: :render
-  defp classify_taint(:slot, [_, [do: _]]), do: :render
+  defp classify_taint(:inner_block, [_, [do: _]]), do: :render
   defp classify_taint(:render_layout, [_, _, _, [do: _]]), do: :render
 
-  defp classify_taint(:alias, [_]), do: :always
-  defp classify_taint(:import, [_]), do: :always
-  defp classify_taint(:require, [_]), do: :always
-  defp classify_taint(:alias, [_, _]), do: :always
-  defp classify_taint(:import, [_, _]), do: :always
-  defp classify_taint(:require, [_, _]), do: :always
+  defp classify_taint(:alias, [_]), do: :special_form
+  defp classify_taint(:import, [_]), do: :special_form
+  defp classify_taint(:require, [_]), do: :special_form
+  defp classify_taint(:alias, [_, _]), do: :special_form
+  defp classify_taint(:import, [_, _]), do: :special_form
+  defp classify_taint(:require, [_, _]), do: :special_form
 
   defp classify_taint(:&, [_]), do: :never
   defp classify_taint(:for, _), do: :never

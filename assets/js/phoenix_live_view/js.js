@@ -1,7 +1,7 @@
 import DOM from "./dom"
 
 let JS = {
-  exec(eventType, phxEvent, view, el, defaults){
+  exec(eventType, phxEvent, view, sourceEl, defaults){
     let [defaultKind, defaultArgs] = defaults || [null, {}]
     let commands = phxEvent.charAt(0) === "[" ?
       JSON.parse(phxEvent) : [[defaultKind, defaultArgs]]
@@ -10,23 +10,26 @@ let JS = {
       if(kind === defaultKind && defaultArgs.data){
         args.data = Object.assign(args.data || {}, defaultArgs.data)
       }
-      this[`exec_${kind}`](eventType, phxEvent, view, el, args)
+      this.filterToEls(sourceEl, args).forEach(el => {
+        this[`exec_${kind}`](eventType, phxEvent, view, sourceEl, el, args)
+      })
     })
+  },
+
+  isVisible(el){
+    let style = window.getComputedStyle(el)
+    return !(style.opacity === 0 || style.display === "none")
   },
 
   // private
 
   // commands
 
-  exec_dispatch(eventType, phxEvent, view, sourceEl, {to, event, detail}){
-    if(to){
-      DOM.all(document, to, el => DOM.dispatchEvent(el, event, detail))
-    } else {
-      DOM.dispatchEvent(sourceEl, event, detail)
-    }
+  exec_dispatch(eventType, phxEvent, view, sourceEl, el, {to, event, detail}){
+    DOM.dispatchEvent(el, event, detail)
   },
 
-  exec_push(eventType, phxEvent, view, sourceEl, args){
+  exec_push(eventType, phxEvent, view, sourceEl, el, args){
     let {event, data, target, page_loading, loading, value} = args
     let pushOpts = {page_loading: !!page_loading, loading: loading, value: value}
     let targetSrc = eventType === "change" ? sourceEl.form : sourceEl
@@ -44,54 +47,39 @@ let JS = {
     })
   },
 
-  exec_add_class(eventType, phxEvent, view, sourceEl, {to, names, transition, time}){
-    if(to){
-      DOM.all(document, to, el => this.addOrRemoveClasses(el, names, [], transition, time, view))
-    } else {
-      this.addOrRemoveClasses(sourceEl, names, [], transition, view)
-    }
+  exec_add_class(eventType, phxEvent, view, sourceEl, el, {names, transition, time}){
+    this.addOrRemoveClasses(el, names, [], transition, time, view)
   },
 
-  exec_remove_class(eventType, phxEvent, view, sourceEl, {to, names, transition, time}){
-    if(to){
-      DOM.all(document, to, el => this.addOrRemoveClasses(el, [], names, transition, time, view))
-    } else {
-      this.addOrRemoveClasses(sourceEl, [], names, transition, time, view)
-    }
+  exec_remove_class(eventType, phxEvent, view, sourceEl, el, {names, transition, time}){
+    this.addOrRemoveClasses(el, [], names, transition, time, view)
   },
 
-  exec_transition(eventType, phxEvent, view, sourceEl, {time, to, transition}){
-    let els = to ? DOM.all(document, to) : [sourceEl]
+  exec_transition(eventType, phxEvent, view, sourceEl, el, {time, transition}){
     let [transition_start, running, transition_end] = transition
-    els.forEach(el => {
-      let onStart = () => this.addOrRemoveClasses(el, transition_start.concat(running), [])
-      let onDone = () => this.addOrRemoveClasses(el, transition_end, transition_start.concat(running))
-      view.transition(time, onStart, onDone)
-    })
+    let onStart = () => this.addOrRemoveClasses(el, transition_start.concat(running), [])
+    let onDone = () => this.addOrRemoveClasses(el, transition_end, transition_start.concat(running))
+    view.transition(time, onStart, onDone)
   },
 
-  exec_toggle(eventType, phxEvent, view, sourceEl, {to, display, ins, outs, time}){
-    if(to){
-      DOM.all(document, to, el => this.toggle(eventType, view, el, display, ins, outs, time))
-    } else {
-      this.toggle(eventType, view, sourceEl, display, ins, outs, time)
-    }
+  exec_toggle(eventType, phxEvent, view, sourceEl, el, {display, ins, outs, time}){
+    this.toggle(eventType, view, el, display, ins, outs, time)
   },
 
-  exec_show(eventType, phxEvent, view, sourceEl, {to, display, transition, time}){
-    if(to){
-      DOM.all(document, to, el => this.show(eventType, view, el, display, transition, time))
-    } else {
-      this.show(eventType, view, sourceEl, transition, time)
-    }
+  exec_show(eventType, phxEvent, view, sourceEl, el, {display, transition, time}){
+    this.show(eventType, view, el, display, transition, time)
   },
 
-  exec_hide(eventType, phxEvent, view, sourceEl, {to, display, transition, time}){
-    if(to){
-      DOM.all(document, to, el => this.hide(eventType, view, el, display, transition, time))
-    } else {
-      this.hide(eventType, view, sourceEl, display, transition, time)
-    }
+  exec_hide(eventType, phxEvent, view, sourceEl, el, {display, transition, time}){
+    this.hide(eventType, view, el, display, transition, time)
+  },
+
+  exec_set_attr(eventType, phxEvent, view, sourceEl, el, {attr: [attr, val]}){
+    this.setOrRemoveAttrs(el, [[attr, val]], [])
+  },
+
+  exec_remove_attr(eventType, phxEvent, view, sourceEl, el, {attr}){
+    this.setOrRemoveAttrs(el, [], [attr])
   },
 
   // utils for commands
@@ -120,9 +108,11 @@ let JS = {
             window.requestAnimationFrame(() => this.addOrRemoveClasses(el, outEndClasses, outStartClasses))
           })
         }
+        el.dispatchEvent(new Event("phx:hide-start"))
         view.transition(time, onStart, () => {
           this.addOrRemoveClasses(el, [], outClasses.concat(outEndClasses))
           DOM.putSticky(el, "toggle", currentEl => currentEl.style.display = "none")
+          el.dispatchEvent(new Event("phx:hide-end"))
         })
       } else {
         if(eventType === "remove"){ return }
@@ -134,13 +124,22 @@ let JS = {
             window.requestAnimationFrame(() => this.addOrRemoveClasses(el, inEndClasses, inStartClasses))
           })
         }
+        el.dispatchEvent(new Event("phx:show-start"))
         view.transition(time, onStart, () => {
           this.addOrRemoveClasses(el, [], inClasses.concat(inEndClasses))
+          el.dispatchEvent(new Event("phx:show-end"))
         })
       }
     } else {
-      let newDisplay = this.isVisible(el) ? "none" : (display || "block")
-      DOM.putSticky(el, "toggle", currentEl => currentEl.style.display = newDisplay)
+      if(this.isVisible(el)){
+        el.dispatchEvent(new Event("phx:hide-start"))
+        DOM.putSticky(el, "toggle", currentEl => currentEl.style.display = "none")
+        el.dispatchEvent(new Event("phx:hide-end"))
+      } else {
+        el.dispatchEvent(new Event("phx:show-start"))
+        DOM.putSticky(el, "toggle", currentEl => currentEl.style.display = display || "block")
+        el.dispatchEvent(new Event("phx:show-end"))
+      }
     }
   },
 
@@ -166,15 +165,30 @@ let JS = {
     })
   },
 
-  hasAllClasses(el, classes){ return classes.every(name => el.classList.contains(name)) },
+  setOrRemoveAttrs(el, sets, removes){
+    let [prevSets, prevRemoves] = DOM.getSticky(el, "attrs", [[], []])
+    let keepSets = sets.filter(([attr, _val]) => !this.hasSet(prevSets, attr) && !el.attributes.getNamedItem(attr))
+    let keepRemoves = removes.filter(attr => prevRemoves.indexOf(attr) < 0 && el.attributes.getNamedItem(attr))
+    let newSets = prevSets.filter(([attr, _val]) => removes.indexOf(attr) < 0).concat(keepSets)
+    let newRemoves = prevRemoves.filter(attr => !this.hasSet(sets, attr)).concat(keepRemoves)
 
-  isVisible(el){
-    let style = window.getComputedStyle(el)
-    return !(style.opacity === 0 || style.display === "none")
+    DOM.putSticky(el, "attrs", currentEl => {
+      newRemoves.forEach(attr => currentEl.removeAttribute(attr))
+      newSets.forEach(([attr, val]) => currentEl.setAttribute(attr, val))
+      return [newSets, newRemoves]
+    })
   },
+
+  hasSet(sets, nameSearch){ return sets.find(([name, val]) => name === nameSearch) },
+
+  hasAllClasses(el, classes){ return classes.every(name => el.classList.contains(name)) },
 
   isToggledOut(el, outClasses){
     return !this.isVisible(el) || this.hasAllClasses(el, outClasses)
+  },
+
+  filterToEls(sourceEl, {to}){
+    return to ? DOM.all(document, to) : [sourceEl]
   }
 }
 

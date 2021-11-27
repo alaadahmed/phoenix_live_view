@@ -2,7 +2,7 @@
 
 LiveView begins its life-cycle as a regular HTTP request. Then a stateful
 connection is established. Both the HTTP request and the stateful connection
-receives the client data via parameters and session.
+receive the client data via parameters and session.
 
 This means that any session validation must happen both in the HTTP request
 (plug pipeline) and the stateful connection (LiveView mount).
@@ -59,14 +59,14 @@ should execute those same verifications:
       {:ok, socket}
     end
 
-LiveView v0.16 includes the `on_mount` (`Phoenix.LiveView.on_mount/1`) hook,
+LiveView v0.17 includes the `on_mount` (`Phoenix.LiveView.on_mount/1`) hook,
 which allows you to encapsulate this logic and execute it on every mount,
 as you would with plug:
 
     defmodule MyAppWeb.UserLiveAuth do
       import Phoenix.LiveView
 
-      def mount(params, %{"user_id" => user_id} = _session, socket) do
+      def on_mount(:default, params, %{"user_id" => user_id} = _session, socket) do
         socket = assign_new(socket, :current_user, fn ->
           Accounts.get_user!(user_id)
         end)
@@ -79,18 +79,32 @@ as you would with plug:
       end
     end
 
-and then use it on all relevant LiveViews:
+
+We use [`assign_new/3`](`Phoenix.LiveView.assign_new/3`). This is a
+convenience to avoid fetching the `current_user` multiple times across
+LiveViews.
+
+Now we can use the hook whenever relevant:
 
     defmodule MyAppWeb.PageLive do
-      use Phoenix.LiveView
+      use MyAppWeb, :live_view
       on_mount MyAppWeb.UserLiveAuth
 
       ...
     end
 
-Note in the snippet above we used [`assign_new/3`](`Phoenix.LiveView.assign_new/3`).
-This is a convenience to avoid fetching the `current_user` multiple times across
-LiveViews.
+If you prefer, you can add the hook to `def live_view` under `MyAppWeb`,
+to run it on all LiveViews by default:
+
+    def live_view do
+      quote do
+        use Phoenix.LiveView,
+          layout: {<%= web_namespace %>.LayoutView, "live.html"}
+
+        on_mount MyAppWeb.UserLiveAuth
+        unquote(view_helpers())
+      end
+    end
 
 ## Events considerations
 

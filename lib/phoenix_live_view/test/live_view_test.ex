@@ -358,8 +358,7 @@ defmodule Phoenix.LiveViewTest do
 
     opts =
       if flash = conn.private[:phoenix_flash] do
-        endpoint = Phoenix.Controller.endpoint_module(conn)
-        %{to: to, flash: Phoenix.LiveView.Utils.sign_flash(endpoint, flash)}
+        %{to: to, flash: flash}
       else
         %{to: to}
       end
@@ -455,7 +454,7 @@ defmodule Phoenix.LiveViewTest do
                "some markup in component"
 
   """
-  defmacro render_component(component, assigns, opts \\ []) do
+  defmacro render_component(component, assigns \\ Macro.escape(%{}), opts \\ []) do
     endpoint = Module.get_attribute(__CALLER__.module, :endpoint)
 
     quote do
@@ -473,7 +472,10 @@ defmodule Phoenix.LiveViewTest do
   @doc false
   def __render_component__(endpoint, %{module: component}, assigns, opts) do
     socket = %Socket{endpoint: endpoint, router: opts[:router]}
-    assigns = Map.new(assigns)
+
+    assigns =
+      Map.new(assigns)
+      |> Map.put_new(:__changed__, %{})
 
     # TODO: Make the ID required once we support only stateful module components as live_component
     mount_assigns = if assigns[:id], do: %{myself: %Phoenix.LiveComponent.CID{cid: -1}}, else: %{}
@@ -488,6 +490,7 @@ defmodule Phoenix.LiveViewTest do
 
     assigns
     |> Map.new()
+    |> Map.put_new(:__changed__, %{})
     |> function.()
     |> rendered_to_diff_string(socket)
   end
@@ -505,7 +508,7 @@ defmodule Phoenix.LiveViewTest do
       iex> ~H"""
       ...> <div>example</div>
       ...> """
-      ...> |> rendered_string()
+      ...> |> rendered_to_string()
       "<div>example</div>"
 
   '''
@@ -1192,8 +1195,8 @@ defmodule Phoenix.LiveViewTest do
   def assert_patch(view, to) when is_binary(to), do: assert_patch(view, to, 100)
 
   @doc """
-  Asserts a live patch will to a given path within `timeout` milliseconds. The
-  default `timeout` is 100.
+  Asserts a live patch will happen to a given path within `timeout`
+  milliseconds. The default `timeout` is 100.
 
   It always returns `:ok`.
 
@@ -1280,13 +1283,13 @@ defmodule Phoenix.LiveViewTest do
   @doc """
   Asserts a redirect was performed.
 
-  It returns a tuple containing the new path and the flash messages
-  from said redirect, if any. Note the flash will contain string keys.
+  It returns the flash messages from said redirect, if any. Note the
+  flash will contain string keys.
 
   ## Examples
 
       render_click(view, :event_that_triggers_redirect)
-      {_path, flash} = assert_redirected view, "/path"
+      flash = assert_redirected view, "/path"
       assert flash["info"] == "Welcome"
 
   """
@@ -1324,7 +1327,7 @@ defmodule Phoenix.LiveViewTest do
   ## Examples
 
       render_click(view, :event_that_triggers_redirect_to_path)
-      :ok = refute_redirect view, "/wrong_path"
+      :ok = refute_redirected view, "/wrong_path"
   """
   def refute_redirected(view, to) when is_binary(to) do
     refute_navigation(view, :redirect, to)
@@ -1524,11 +1527,11 @@ defmodule Phoenix.LiveViewTest do
     quote bind_quoted: binding() do
       case reason do
         {:error, {:live_redirect, opts}} ->
-          {conn, to} = Phoenix.LiveViewTest.__follow_redirect__(conn, to, opts)
+          {conn, to} = Phoenix.LiveViewTest.__follow_redirect__(conn, @endpoint, to, opts)
           live(conn, to)
 
         {:error, {:redirect, opts}} ->
-          {conn, to} = Phoenix.LiveViewTest.__follow_redirect__(conn, to, opts)
+          {conn, to} = Phoenix.LiveViewTest.__follow_redirect__(conn, @endpoint, to, opts)
           {:ok, get(conn, to)}
 
         _ ->
@@ -1538,7 +1541,7 @@ defmodule Phoenix.LiveViewTest do
   end
 
   @doc false
-  def __follow_redirect__(conn, expected_to, %{to: to} = opts) do
+  def __follow_redirect__(conn, endpoint, expected_to, %{to: to} = opts) do
     if expected_to && expected_to != to do
       raise ArgumentError,
             "expected LiveView to redirect to #{inspect(expected_to)}, but got #{inspect(to)}"
@@ -1547,11 +1550,18 @@ defmodule Phoenix.LiveViewTest do
     conn = Phoenix.ConnTest.ensure_recycled(conn)
 
     if flash = opts[:flash] do
-      {Phoenix.ConnTest.put_req_cookie(conn, @flash_cookie, flash), to}
+      {Phoenix.ConnTest.put_req_cookie(conn, @flash_cookie, ensure_signed_flash(endpoint, flash)),
+       to}
     else
       {conn, to}
     end
   end
+
+  defp ensure_signed_flash(endpoint, flash) when is_map(flash) do
+    Phoenix.LiveView.Utils.sign_flash(endpoint, flash)
+  end
+
+  defp ensure_signed_flash(_, flash), do: flash
 
   @doc """
   Performs a live redirect from one LiveView to another.

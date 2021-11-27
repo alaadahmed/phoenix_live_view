@@ -8,7 +8,7 @@ defmodule Phoenix.LiveView.JS do
   client-side hooks, JS commands are DOM patch aware, so operations applied
   by the JS APIs will stick to elements across patches from the server.
 
-  In addition to purely client-side utilities, the JS command incluces a
+  In addition to purely client-side utilities, the JS commands include a
   rich `push` API, for extending the default `phx-` binding pushes with
   options to customize targets, loading states, and additional payload values.
 
@@ -45,7 +45,7 @@ defmodule Phoenix.LiveView.JS do
     * `remove_class` - Remove classes from elements, with optional transitions
     * `show` - Show elements, with optional transitions
     * `hide` - Hide elements, with optional transitions
-    * `toggle` - Shows or hides elements based on visiblity, with optional transitions
+    * `toggle` - Shows or hides elements based on visibility, with optional transitions
     * `transition` - Apply a temporary transition to elements for animations
     * `dispatch` - Dispatch a DOM event to elements
 
@@ -92,7 +92,10 @@ defmodule Phoenix.LiveView.JS do
   @doc """
   Pushes an event to the server.
 
+    * `event` - The string event name to push.
+
   ## Options
+
     * `:target` - The selector or component ID to push to
     * `:loading` - The selector to apply the phx loading classes to
     * `:page_loading` - Boolean to trigger the phx:page-loading-start and
@@ -178,6 +181,9 @@ defmodule Phoenix.LiveView.JS do
       Defaults #{@default_transition_time}
     * `:display` - The optional display value to set when toggling in. Defaults `"block"`.
 
+  When the toggle is complete on the client, a `phx:show-start` or `phx:hide-start`, and
+  `phx:show-end` or `phx:hide-end` event will be dispatched to the toggled elements.
+
   ## Examples
 
       <div id="item">My Item</div>
@@ -186,7 +192,7 @@ defmodule Phoenix.LiveView.JS do
         toggle item!
       </button>
 
-      <button phx-click={JS.show(to: "#item", in: "fade-in-scale", out: "fade-out-scale")}>
+      <button phx-click={JS.toggle(to: "#item", in: "fade-in-scale", out: "fade-out-scale")}>
         toggle fancy!
       </button>
   """
@@ -223,6 +229,9 @@ defmodule Phoenix.LiveView.JS do
     * `:time` - The time to apply the transition from `:transition`.
       Defaults #{@default_transition_time}
     * `:display` - The optional display value to set when showing. Defaults `"block"`.
+
+  When the show is complete on the client, a `phx:show-start` and `phx:show-end` event
+  will be dispatched to the shown elements.
 
   ## Examples
 
@@ -267,6 +276,9 @@ defmodule Phoenix.LiveView.JS do
     * `:time` - The time to apply the transition from `:transition`.
       Defaults #{@default_transition_time}
 
+  When the show is complete on the client, a `phx:hide-start` and `phx:hide-end`
+  event will be dispatched to the hidden elements.
+
   ## Examples
 
       <div id="item">My Item</div>
@@ -297,6 +309,8 @@ defmodule Phoenix.LiveView.JS do
 
   @doc """
   Adds classes to elements.
+
+    * `names` - The string of classes to add.
 
   ## Options
 
@@ -341,6 +355,8 @@ defmodule Phoenix.LiveView.JS do
   @doc """
   Removes classes from elements.
 
+    * `names` - The string of classes to remove.
+
   ## Options
 
     * `:to` - The optional DOM selector to remove classes from.
@@ -384,17 +400,18 @@ defmodule Phoenix.LiveView.JS do
   @doc """
   Transitions elements.
 
+    * `transition` - The string of classes to apply before removing classes or
+      a 3-tuple containing the transition class, the class to apply
+      to start the transition, and the ending transition class, such as:
+      `{"ease-out duration-300", "opacity-0", "opacity-100"}`
+
   Transitions are useful for temporarily adding an animation class
   to element(s), such as for highlighting content changes.
 
   ## Options
 
-    * `:to` - The optional DOM selector to remove classes from.
+    * `:to` - The optional DOM selector to apply transitions to.
       Defaults to the interacted element.
-    * `:transition` - The string of classes to apply before removing classes or
-      a 3-tuple containing the transition class, the class to apply
-      to start the transition, and the ending transition class, such as:
-      `{"ease-out duration-300", "opacity-0", "opacity-100"}`
     * `:time` - The time to apply the transition from `:transition`.
       Defaults #{@default_transition_time}
 
@@ -403,27 +420,85 @@ defmodule Phoenix.LiveView.JS do
       <div id="item">My Item</div>
       <button phx-click={JS.transition("shake", to: "#item")}>Shake!</button>
   """
-  def transition(names) when is_binary(names) or is_tuple(names) do
-    transition(%JS{}, names, [])
+  def transition(transition) when is_binary(transition) or is_tuple(transition) do
+    transition(%JS{}, transition, [])
   end
 
-  def transition(names, opts) when (is_binary(names) or is_tuple(names)) and is_list(opts) do
-    transition(%JS{}, names, opts)
+  def transition(transition, opts)
+      when (is_binary(transition) or is_tuple(transition)) and is_list(opts) do
+    transition(%JS{}, transition, opts)
   end
 
-  def transition(%JS{} = cmd, names) when is_binary(names) or is_tuple(names) do
-    transition(cmd, names, [])
+  def transition(%JS{} = cmd, transition) when is_binary(transition) or is_tuple(transition) do
+    transition(cmd, transition, [])
   end
 
-  def transition(%JS{} = cmd, names, opts) when (is_binary(names) or is_tuple(names)) and is_list(opts) do
+  def transition(%JS{} = cmd, transition, opts)
+      when (is_binary(transition) or is_tuple(transition)) and is_list(opts) do
     opts = validate_keys(opts, :transition, [:to, :time])
     time = opts[:time] || @default_transition_time
 
     put_op(cmd, "transition", %{
       time: time,
       to: opts[:to],
-      transition: transition_class_names(names)
+      transition: transition_class_names(transition)
     })
+  end
+
+  @doc """
+  Sets an attribute on elements.
+
+  Accepts a tuple containing the string attribute name/value pair.
+
+  ## Options
+
+    * `:to` - The optional DOM selector to add attributes to.
+      Defaults to the interacted element.
+
+  ## Examples
+
+      <button phx-click={JS.set_attribute({"aria-expanded", "true"}, to: "#dropdown")}>
+        show
+      </button>
+  """
+  def set_attribute({attr, val}), do: set_attribute(%JS{}, {attr, val}, [])
+
+  def set_attribute({attr, val}, opts) when is_list(opts),
+    do: set_attribute(%JS{}, {attr, val}, opts)
+
+  def set_attribute(%JS{} = cmd, {attr, val}), do: set_attribute(cmd, {attr, val}, [])
+
+  def set_attribute(%JS{} = cmd, {attr, val}, opts) when is_list(opts) do
+    opts = validate_keys(opts, :set_attribute, [:to])
+    put_op(cmd, "set_attr", %{to: opts[:to], attr: [attr, val]})
+  end
+
+  @doc """
+  Removes an attribute from elements.
+
+    * `attr` - The string attribute name to remove.
+
+  ## Options
+
+    * `:to` - The optional DOM selector to remove attributes from.
+      Defaults to the interacted element.
+
+  ## Examples
+
+      <button phx-click={JS.remove_attribute("aria-expanded", to: "#dropdown")}>
+        hide
+      </button>
+  """
+  def remove_attribute(attr), do: remove_attribute(%JS{}, attr, [])
+
+  def remove_attribute(attr, opts) when is_list(opts),
+    do: remove_attribute(%JS{}, attr, opts)
+
+  def remove_attribute(%JS{} = cmd, attr), do: remove_attribute(cmd, attr, [])
+
+  def remove_attribute(%JS{} = cmd, attr, opts) when is_list(opts) do
+    opts = validate_keys(opts, :remove_attribute, [:to])
+    put_op(cmd, "remove_attr", %{to: opts[:to], attr: attr})
   end
 
   defp put_op(%JS{ops: ops} = cmd, kind, %{} = args) do

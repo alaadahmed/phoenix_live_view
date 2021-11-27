@@ -28,6 +28,14 @@ describe("JS", () => {
       `)
       let modal = simulateVisibility(document.querySelector("#modal"))
       let click = document.querySelector("#click")
+      let showEndCalled = false
+      let hideEndCalled = false
+      let showStartCalled = false
+      let hideStartCalled = false
+      modal.addEventListener("phx:show-end", () => showEndCalled = true)
+      modal.addEventListener("phx:hide-end", () => hideEndCalled = true)
+      modal.addEventListener("phx:show-start", () => showStartCalled = true)
+      modal.addEventListener("phx:hide-start", () => hideStartCalled = true)
 
       expect(modal.style.display).toEqual("")
       JS.exec("click", click.getAttribute("phx-click"), view, click)
@@ -35,6 +43,10 @@ describe("JS", () => {
 
       JS.exec("click", click.getAttribute("phx-click"), view, click)
       expect(modal.style.display).toEqual("block")
+      expect(showEndCalled).toBe(true)
+      expect(hideEndCalled).toBe(true)
+      expect(showStartCalled).toBe(true)
+      expect(hideStartCalled).toBe(true)
     })
 
     test("with display", () => {
@@ -44,6 +56,14 @@ describe("JS", () => {
       `)
       let modal = simulateVisibility(document.querySelector("#modal"))
       let click = document.querySelector("#click")
+      let showEndCalled = false
+      let hideEndCalled = false
+      let showStartCalled = false
+      let hideStartCalled = false
+      modal.addEventListener("phx:show-end", () => showEndCalled = true)
+      modal.addEventListener("phx:hide-end", () => hideEndCalled = true)
+      modal.addEventListener("phx:show-start", () => showStartCalled = true)
+      modal.addEventListener("phx:hide-start", () => hideStartCalled = true)
 
       expect(modal.style.display).toEqual("")
       JS.exec("click", click.getAttribute("phx-click"), view, click)
@@ -51,6 +71,10 @@ describe("JS", () => {
 
       JS.exec("click", click.getAttribute("phx-click"), view, click)
       expect(modal.style.display).toEqual("inline-block")
+      expect(showEndCalled).toBe(true)
+      expect(hideEndCalled).toBe(true)
+      expect(showStartCalled).toBe(true)
+      expect(hideStartCalled).toBe(true)
     })
 
     test("with in and out classes", done => {
@@ -60,6 +84,14 @@ describe("JS", () => {
       `)
       let modal = simulateVisibility(document.querySelector("#modal"))
       let click = document.querySelector("#click")
+      let showEndCalled = false
+      let hideEndCalled = false
+      let showStartCalled = false
+      let hideStartCalled = false
+      modal.addEventListener("phx:show-end", () => showEndCalled = true)
+      modal.addEventListener("phx:hide-end", () => hideEndCalled = true)
+      modal.addEventListener("phx:show-start", () => showStartCalled = true)
+      modal.addEventListener("phx:hide-start", () => hideStartCalled = true)
 
       expect(modal.style.display).toEqual("")
       expect(modal.classList.contains("fade-out")).toBe(false)
@@ -77,6 +109,10 @@ describe("JS", () => {
                 window.requestAnimationFrame(() => {
                   expect(modal.classList.contains("fade-out")).toBe(false)
                   expect(modal.classList.contains("fade-in")).toBe(true)
+                  expect(showEndCalled).toBe(true)
+                  expect(hideEndCalled).toBe(true)
+                  expect(showStartCalled).toBe(true)
+                  expect(hideStartCalled).toBe(true)
                   done()
                 })
               })
@@ -340,6 +376,43 @@ describe("JS", () => {
       expect(modal.style.display).toEqual("")
       JS.exec("click", click.getAttribute("phx-click"), view, click)
       expect(modal.style.display).toEqual("none")
+    })
+  })
+
+  describe("exec_set_attr and exec_remove_attr", () => {
+    test("with defaults", () => {
+      let view = setupView(`
+      <div id="modal" class="modal">modal</div>
+      <div id="set" phx-click='[["set_attr", {"to": "#modal", "attr": ["aria-expanded", "true"]}]]'></div>
+      <div id="remove" phx-click='[["remove_attr", {"to": "#modal", "attr": "aria-expanded"}]]'></div>
+      `)
+      let modal = document.querySelector("#modal")
+      let set = document.querySelector("#set")
+      let remove = document.querySelector("#remove")
+
+      expect(modal.getAttribute("aria-expanded")).toEqual(null)
+      JS.exec("click", set.getAttribute("phx-click"), view, set)
+      expect(modal.getAttribute("aria-expanded")).toEqual("true")
+
+      JS.exec("click", remove.getAttribute("phx-click"), view, remove)
+      expect(modal.getAttribute("aria-expanded")).toEqual(null)
+    })
+
+    test("with no selector", () => {
+      let view = setupView(`
+      <div id="set" phx-click='[["set_attr", {"to": null, "attr": ["aria-expanded", "true"]}]]'></div>
+      <div id="remove" class="here" phx-click='[["remove_attr", {"to": null, "attr": "class"}]]'></div>
+      `)
+      let set = document.querySelector("#set")
+      let remove = document.querySelector("#remove")
+
+      expect(set.getAttribute("aria-expanded")).toEqual(null)
+      JS.exec("click", set.getAttribute("phx-click"), view, set)
+      expect(set.getAttribute("aria-expanded")).toEqual("true")
+
+      expect(remove.getAttribute("class")).toEqual("here")
+      JS.exec("click", remove.getAttribute("phx-click"), view, remove)
+      expect(remove.getAttribute("class")).toEqual(null)
     })
   })
 })

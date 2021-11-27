@@ -19,6 +19,7 @@ import {
   PHX_PROGRESS,
   PHX_READONLY,
   PHX_REF,
+  PHX_REF_SRC,
   PHX_ROOT_ID,
   PHX_SESSION,
   PHX_STATIC,
@@ -28,6 +29,7 @@ import {
   PHX_UPLOAD_REF,
   PHX_VIEW_SELECTOR,
   PUSH_TIMEOUT,
+  PHX_MAIN,
 } from "./constants"
 
 import {
@@ -113,7 +115,7 @@ export default class View {
     this.href = href
   }
 
-  isMain(){ return this.liveSocket.main === this }
+  isMain(){ return this.el.getAttribute(PHX_MAIN) !== null }
 
   connectParams(){
     let params = this.liveSocket.params(this.el)
@@ -254,7 +256,12 @@ export default class View {
     })
   }
 
-  dropPendingRefs(){ DOM.all(this.el, `[${PHX_REF}]`, el => el.removeAttribute(PHX_REF)) }
+  dropPendingRefs(){
+    DOM.all(document, `[${PHX_REF_SRC}="${this.id}"][${PHX_REF}]`, el => {
+      el.removeAttribute(PHX_REF)
+      el.removeAttribute(PHX_REF_SRC)
+    })
+  }
 
   onJoinComplete({live_patch}, html, events){
     // In order to provide a better experience, we want to join
@@ -338,7 +345,13 @@ export default class View {
       if(newHook){ newHook.__mounted() }
     })
 
-    patch.after("phxChildAdded", _el => phxChildrenAdded = true)
+    patch.after("phxChildAdded", el => {
+      if(DOM.isPhxSticky(el)){
+        this.liveSocket.joinRootViews()
+      } else {
+        phxChildrenAdded = true
+      }
+    })
 
     patch.before("updated", (fromEl, toEl) => {
       let hook = this.triggerBeforeUpdateHook(fromEl, toEl)
@@ -565,7 +578,7 @@ export default class View {
   isDestroyed(){ return this.destroyed }
 
   join(callback){
-    if(!this.parent){
+    if(this.isMain()){
       this.stopCallback = this.liveSocket.withPageLoading({to: this.href, kind: "initial"})
     }
     this.joinCallback = (onDone) => {
@@ -640,30 +653,35 @@ export default class View {
     return (
       this.liveSocket.wrapPush(this, {timeout: true}, () => {
         return this.channel.push(event, payload, PUSH_TIMEOUT).receive("ok", resp => {
-          this.liveSocket.requestDOMUpdate(() => {
-            let hookReply = null
-            if(ref !== null){ this.undoRefs(ref) }
-            if(resp.diff){
-              hookReply = this.applyDiff("update", resp.diff, ({diff, events}) => {
-                this.update(diff, events)
-              })
-            }
+          if(ref !== null){ this.undoRefs(ref) }
+          let finish = (hookReply) => {
             if(resp.redirect){ this.onRedirect(resp.redirect) }
             if(resp.live_patch){ this.onLivePatch(resp.live_patch) }
             if(resp.live_redirect){ this.onLiveRedirect(resp.live_redirect) }
             onLoadingDone()
             onReply(resp, hookReply)
-          })
+          }
+          if(resp.diff){
+            this.liveSocket.requestDOMUpdate(() => {
+              let hookReply = this.applyDiff("update", resp.diff, ({diff, events}) => {
+                this.update(diff, events)
+              })
+              finish(hookReply)
+            })
+          } else {
+            finish(null)
+          }
         })
       })
     )
   }
 
   undoRefs(ref){
-    DOM.all(this.el, `[${PHX_REF}="${ref}"]`, el => {
+    DOM.all(document, `[${PHX_REF_SRC}="${this.id}"][${PHX_REF}="${ref}"]`, el => {
       let disabledVal = el.getAttribute(PHX_DISABLED)
       // remove refs
       el.removeAttribute(PHX_REF)
+      el.removeAttribute(PHX_REF_SRC)
       // restore inputs
       if(el.getAttribute(PHX_READONLY) !== null){
         el.readOnly = false
@@ -699,12 +717,14 @@ export default class View {
     elements.forEach(el => {
       el.classList.add(`phx-${event}-loading`)
       el.setAttribute(PHX_REF, newRef)
+      el.setAttribute(PHX_REF_SRC, this.el.id)
       let disableText = el.getAttribute(disableWith)
       if(disableText !== null){
         if(!el.getAttribute(PHX_DISABLE_WITH_RESTORE)){
           el.setAttribute(PHX_DISABLE_WITH_RESTORE, el.innerText)
         }
-        el.innerText = disableText
+        if(disableText !== ""){ el.innerText = disableText }
+        el.setAttribute("disabled", "")
       }
     })
     return [newRef, elements, opts]

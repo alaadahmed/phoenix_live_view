@@ -201,7 +201,7 @@ defmodule Phoenix.LiveView.Helpers do
   do not belong in the markup, or are already handled explicitly by the component.
   '''
   def assigns_to_attributes(assigns, exclude \\ []) do
-    excluded_keys = [:__changed__, :__slot__, :inner_block] ++ exclude
+    excluded_keys = [:__changed__, :__slot__, :inner_block, :myself, :flash, :socket] ++ exclude
     for {key, val} <- assigns, key not in excluded_keys, into: [], do: {key, val}
   end
 
@@ -331,24 +331,32 @@ defmodule Phoenix.LiveView.Helpers do
 
   ## Options
 
-    * `:session` - the map of extra session data to be serialized
-      and sent to the client. Note that all session data currently in
-      the connection is automatically available in LiveViews. You
-      can use this option to provide extra data. Also note that the keys
-      in the session are strings keys, as a reminder that data has
-      to be serialized first.
+    * `:session` - a map of binary keys with extra session data to be
+      serialized and sent to the client. Note that all session data
+      currently in the connection is automatically available in LiveViews.
+      You can use this option to provide extra data. Remember all session
+      data is serialized and sent to the client. So you should always
+      keep the data in the session to a minimum. For example, instead
+      of storing a User struct, you should store the "user_id" and load
+      the User when the LiveView mounts.
+
     * `:container` - an optional tuple for the HTML tag and DOM
       attributes to be used for the LiveView container. For example:
       `{:li, style: "color: blue;"}`. By default it uses the module
       definition container. See the "Containers" section below for more
       information.
+
     * `:id` - both the DOM ID and the ID to uniquely identify a LiveView.
       An `:id` is automatically generated when rendering root LiveViews
       but it is a required option when rendering a child LiveView.
+
     * `:router` - an optional router that enables this LiveView to
       perform live navigation. Only a single LiveView in a page may
       have the `:router` set. LiveViews defined at the router with
       the `live` macro automatically have the `:router` option set.
+
+    * `:sticky` - an optional flag to maintain the live view across
+      live redirects, even if it is nested within another parent.
 
   ## Examples
 
@@ -557,7 +565,7 @@ defmodule Phoenix.LiveView.Helpers do
 
       <MyApp.Weather.city name="Kraków" />
 
-  It the same as:
+  Is the same as:
 
       <%= component(&MyApp.Weather.city/1, name: "Kraków") %>
 
@@ -647,11 +655,11 @@ defmodule Phoenix.LiveView.Helpers do
       def table(assigns) do
         ~H"""
         <table>
-          <th>
+          <tr>
             <%= for col <- @col do %>
-              <td><%= col.label %></td>
+              <th><%= col.label %></th>
             <% end >
-          </th>
+          </tr>
           <%= for row <- @rows do %>
             <tr>
               <%= for col <- @col do %>
@@ -703,16 +711,18 @@ defmodule Phoenix.LiveView.Helpers do
   end
 
   @doc """
-  Defines a slot's inner block.
+  Define a inner block, generally used by slots.
 
   This macro is mostly used by HTML engines that provides
-  a `slot` implementation and rarely called directly.
+  a `slot` implementation and rarely called directly. The
+  `name` must be the assign name the slot/block will be stored
+  under.
 
   If you're using HEEx templates, you should use its higher
   level `<:slot>` notation instead. See `Phoenix.Component`
   for more information.
   """
-  defmacro slot(name, do: do_block) do
+  defmacro inner_block(name, do: do_block) do
     rewrite_do!(do_block, name, __CALLER__)
   end
 
